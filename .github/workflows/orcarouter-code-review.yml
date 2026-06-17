@@ -1,0 +1,45 @@
+# Test workflow — vendored (local) action, not the published @v1 tag.
+#
+# The repo contains a copy of `review-action/` at its root, so this references
+# it with `uses: ./review-action`. That's the only difference from the shipped
+# example workflow.
+
+name: OrcaRouter Code Review
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request_target' ||
+      (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        startsWith(github.event.comment.body, '/orcarouter-review') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+    steps:
+      # Local (vendored) actions require the repo to be present before the
+      # `uses: ./...` step can resolve. The shipped example (remote @v1) doesn't
+      # need this; the test repo does because it references ./review-action.
+      # This checks out the base default branch (safe on pull_request_target);
+      # the action then does its own checkout of the PR head internally.
+      - uses: actions/checkout@v4
+      - uses: ./review-action
+        with:
+          orcarouter-api-key: ${{ secrets.ORCAROUTER_API_KEY }}
+          # For testing, temporarily swap strong tier to z-ai/glm-5.1 inside the
+          # router's DSL recipe (glm-5.2 isn't in the catalog yet).
+          # router: "orcarouter/code-review"   # the default
