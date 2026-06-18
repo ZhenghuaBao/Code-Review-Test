@@ -307,32 +307,46 @@ runs:
             console.log('Could not parse result.json:', e.message);
           }
           const comments = result.comments || [];
+          // OrcaRouter design: 🐳 header, colored severity dots, brand tagline.
+          const SEV = { P0: '🔴', P1: '🟠', P2: '🟡' };
           const footer =
-            `\n\n---\n*${brand} · reviewed via OrcaRouter · ` +
-            `engine powered by Open Code Review (Apache-2.0)*`;
+            `\n\n<sub>Reviewed via [OrcaRouter](https://orcarouter.ai) — ` +
+            `Route Smarter. Ship Safer. Spend Less. · engine powered by ` +
+            `[Open Code Review](https://github.com/alibaba/open-code-review) (Apache-2.0)</sub>`;
 
           if (comments.length === 0) {
             await github.rest.issues.createComment({
               ...repo, issue_number: num,
-              body: `✅ **${brand}**: no issues found.${footer}`,
+              body: `## 🐳 ${brand}\n\nNo issues found. ✅${footer}`,
             });
             return;
           }
 
+          // Severity from the LEADING [P0]/[P1]/[P2] tag only (mirrors gate.mjs);
+          // a later mention must not override the missing-tag P1 fail-safe.
+          const tagRe = /^\s*\[(P[012])\]\s*/i;
           const sevOf = (c) => {
-            // Tag only counts as the leading text (mirrors gate.mjs); a later
-            // mention must not override the missing-tag P1 fail-safe.
-            const m = String(c.content || '').match(/^\s*\[(P[012])\]/i);
+            const m = String(c.content || '').match(tagRe);
             return m ? m[1].toUpperCase() : 'P1';
+          };
+          // Display form: swap the bare [Px] tag for a colored severity badge.
+          const decorate = (c) => {
+            const text = String(c.content || '');
+            const m = text.match(tagRe);
+            const sev = m ? m[1].toUpperCase() : 'P1';
+            const rest = m ? text.slice(m[0].length) : text;
+            return `${SEV[sev]} **${sev}** ${rest}`;
           };
           const counts = {};
           for (const c of comments) counts[sevOf(c)] = (counts[sevOf(c)] || 0) + 1;
           const breakdown = ['P0', 'P1', 'P2']
             .filter((s) => counts[s])
-            .map((s) => `${counts[s]} ${s}`)
-            .join(', ');
+            .map((s) => `${SEV[s]} ${counts[s]} ${s}`)
+            .join(' · ');
+          const n = comments.length;
           const summary =
-            `🔍 **${brand}** found **${comments.length}** issue(s): ${breakdown}.${footer}`;
+            `## 🐳 ${brand}\n\n` +
+            `Found **${n}** issue${n === 1 ? '' : 's'} in this PR: ${breakdown}.`;
 
           const inline = [];
           const rest = [];
@@ -340,18 +354,18 @@ runs:
             const line =
               c.end_line >= 1 ? c.end_line : c.start_line >= 1 ? c.start_line : 0;
             if (line >= 1 && c.path) {
-              inline.push({ path: c.path, line, side: 'RIGHT', body: c.content || '' });
+              inline.push({ path: c.path, line, side: 'RIGHT', body: decorate(c) });
             } else {
               rest.push(c);
             }
           }
           let body = summary;
-          for (const c of rest) body += `\n\n---\n\`${c.path}\`: ${c.content || ''}`;
+          for (const c of rest) body += `\n\n---\n\`${c.path}\`: ${decorate(c)}`;
 
           try {
             await github.rest.pulls.createReview({
               ...repo, pull_number: num, commit_id: sha,
-              body, event: 'COMMENT',
+              body: body + footer, event: 'COMMENT',
               comments: inline,
             });
           } catch (e) {
@@ -363,7 +377,7 @@ runs:
             for (const c of inline) {
               fallback += `\n\n---\n\`${c.path}\` (line ${c.line}): ${c.body}`;
             }
-            await github.rest.issues.createComment({ ...repo, issue_number: num, body: fallback });
+            await github.rest.issues.createComment({ ...repo, issue_number: num, body: fallback + footer });
           }
 
     - name: Enforce severity gate
