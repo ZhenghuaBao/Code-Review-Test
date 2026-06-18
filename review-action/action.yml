@@ -57,7 +57,7 @@ inputs:
   block-on:
     description: "Severities that fail the check (block the merge)."
     required: false
-    default: "P0"
+    default: "P0,P1"
   engine-version:
     description: "Pinned @alibaba-group/open-code-review version (the review engine). Bump deliberately after testing — the later steps parse its JSON output shape."
     required: false
