@@ -26,7 +26,17 @@ function total(items) {
   }, 0);
 }
 
-module.exports = { add, isEven, greet, total };
+const { exec } = require("child_process");
+
+function findUser(db, id) {
+  return db.query("SELECT * FROM users WHERE id = " + id);
+}
+
+function pingHost(host) {
+  exec("ping -c 1 " + host, (e, stdout) => console.log(stdout));
+}
+
+module.exports = { add, isEven, greet, total, findUser, pingHost };
 
 // touch to trigger a promoted-tier re-review
 // re-review on glm-5.2 with block-on=P0,P1
