@@ -391,37 +391,33 @@ runs:
             const m = String(c.content || '').match(tagRe);
             return m ? m[1].toUpperCase() : 'P1';
           };
-          // Display form (Codex-style): a colored severity badge, a short bold
-          // subtitle, then the detail as prose. OCR emits a single `[Px] <prose>`
-          // string with no separate title, so synthesize a concise one: drop the
-          // model's own emphasis, break on the first clause boundary (sentence
-          // end, semicolon, colon, dash) and fall back to a word boundary if that
-          // lead is still long. Everything after becomes the body so the subtitle
-          // stays scannable instead of swallowing the whole finding.
+          // Display form (Codex-style): a colored severity badge, then a bold
+          // subtitle + prose ONLY when we can split cleanly; otherwise the finding
+          // stays whole. OCR emits a single `[Px] <prose>` string with no title
+          // field, and a forced split reads worse than no split (mid-phrase breaks,
+          // lowercase fragments). So we split on just two reliable signals: a
+          // model-written **bold** lead, or a short first sentence (which keeps the
+          // body starting on a fresh, capitalized sentence). Anything else: whole.
           const decorate = (c) => {
             const text = String(c.content || '');
             const m = text.match(tagRe);
             const sev = m ? m[1].toUpperCase() : 'P1';
             const badge = `${SEV[sev]} **${sev}**`;
-            const rest = (m ? text.slice(m[0].length) : text)
-              .replace(/\*\*/g, '')
-              .trim();
-            const MAX = 72;
-            const clause = rest.match(/(?<=[.!?])\s|[;:]\s|\s[—–]\s/);
-            let titleEnd, bodyStart;
-            if (clause && clause.index > 0 && clause.index <= MAX) {
-              titleEnd = clause.index;
-              bodyStart = clause.index + clause[0].length;
-            } else if (rest.length > MAX) {
-              const sp = rest.lastIndexOf(' ', MAX);
-              titleEnd = sp > 0 ? sp : MAX;
-              bodyStart = titleEnd + 1;
-            } else {
-              return `${badge} ${rest}`;
+            const raw = (m ? text.slice(m[0].length) : text).trim();
+            const mk = (t) => t.replace(/\*\*/g, '').replace(/[.!?]+$/, '').trim();
+            // 1) The model sometimes writes its own **bold** lead — use it verbatim.
+            const lead = raw.match(/^\*\*(.+?)\*\*\s+([\s\S]+)$/);
+            if (lead) {
+              return `${badge} **${mk(lead[1])}**\n\n${lead[2].replace(/\*\*/g, '').trim()}`;
             }
-            const title = rest.slice(0, titleEnd).replace(/[.,;:—–\s]+$/, '').trim();
-            const body = rest.slice(bodyStart).trim();
-            return `${badge} **${title}**${body ? `\n\n${body}` : ''}`;
+            // 2) Else split only when the first sentence is short enough to title.
+            const rest = raw.replace(/\*\*/g, '');
+            const end = rest.search(/(?<=[.!?])\s/);
+            if (end > 0 && end <= 72) {
+              return `${badge} **${mk(rest.slice(0, end))}**\n\n${rest.slice(end).trim()}`;
+            }
+            // 3) Hard to separate cleanly — keep the finding whole.
+            return `${badge} ${rest}`;
           };
           const counts = {};
           for (const c of comments) counts[sevOf(c)] = (counts[sevOf(c)] || 0) + 1;
