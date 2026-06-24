@@ -31,6 +31,41 @@ import { URL } from "node:url";
 const UPSTREAM = new URL(process.env.ORCAROUTER_URL || "https://api.orcarouter.ai/v1/chat/completions");
 const upstreamLib = UPSTREAM.protocol === "http:" ? http : https;
 const FACTS_FILE = process.env.CR_FACTS_FILE || "";
+// Where to record a guardrail/firewall block so a later step can post it to the
+// PR. The gateway returns these as structured 400s; OCR collapses them into an
+// opaque CLI error, so the proxy is the only place that sees the real reason.
+const POLICY_BLOCK_FILE = process.env.CR_POLICY_BLOCK_FILE || "";
+
+// A guardrail (content policy) or firewall (tool-call policy) block arrives as
+// HTTP 400 with `error.code = guardrail_blocked|firewall_blocked`. Persist the
+// layer, policy name, and a regex-stripped reason; ignore any other 400.
+function recordPolicyBlock(buf) {
+  if (!POLICY_BLOCK_FILE) return;
+  let code, message;
+  try {
+    const j = JSON.parse(buf.toString("utf8"));
+    code = j?.error?.code;
+    message = j?.error?.message || "";
+  } catch {
+    return;
+  }
+  if (code !== "guardrail_blocked" && code !== "firewall_blocked") return;
+  const kind = code === "guardrail_blocked" ? "guardrail" : "firewall";
+  const m = message.match(
+    /blocked by (?:guardrail|firewall(?: policy)?)\s+"([^"]+)"/i,
+  );
+  const detail = message
+    .replace(/regex\(matched pattern "[\s\S]*?"\)/gi, "a configured rule")
+    .trim();
+  try {
+    fs.writeFileSync(
+      POLICY_BLOCK_FILE,
+      JSON.stringify({ kind, policyName: m ? m[1] : null, detail: detail || message }),
+    );
+  } catch {
+    /* best-effort: a missing block comment is acceptable; the job still fails closed */
+  }
+}
 
 // Only x-cr-* facts are injectable; never let the file smuggle auth or other
 // headers in. Matches the gateway's own x-cr-* convention (not on any denylist).
@@ -59,7 +94,26 @@ const server = http.createServer((req, res) => {
     target,
     { method: req.method, headers, host: UPSTREAM.host },
     (upRes) => {
-      res.writeHead(upRes.statusCode || 502, upRes.headers);
+      const status = upRes.statusCode || 502;
+      // Buffer a 400 so we can read the guardrail/firewall reason, then relay
+      // the identical bytes to OCR (which still fails closed). Everything else
+      // streams straight through so SSE stays unbuffered.
+      if (status === 400 && POLICY_BLOCK_FILE) {
+        const chunks = [];
+        upRes.on("data", (c) => chunks.push(c));
+        upRes.on("end", () => {
+          const body = Buffer.concat(chunks);
+          recordPolicyBlock(body);
+          res.writeHead(status, upRes.headers);
+          res.end(body);
+        });
+        upRes.on("error", () => {
+          if (!res.headersSent) res.writeHead(502);
+          res.end();
+        });
+        return;
+      }
+      res.writeHead(status, upRes.headers);
       upRes.pipe(res); // stream SSE through unbuffered
     },
   );

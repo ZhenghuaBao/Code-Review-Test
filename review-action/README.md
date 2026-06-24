@@ -11,9 +11,9 @@ merge.
 
 ## What it does
 
-1. **Stateful cost-tiered cascade** — each PR stores its current tier as a
-   `review-tier:1` label, both tiers routed through OrcaRouter. A PR starts on
-   the cheap tier (no label). If the cheap model finds any **P0/P1**, those are
+1. **Stateful cost-tiered cascade** — each PR stores its current tier as an
+   `orca-review:strong` label, both tiers routed through OrcaRouter. A PR starts
+   on the cheap tier (no label). If the cheap model finds any **P0/P1**, those are
    serious — the PR stays on the cheap tier so you fix them first (no point
    paying for the strong tier while obvious bugs remain). When a cheap pass comes
    back with nothing worse than **P2**, the action **escalates to the strong
@@ -30,7 +30,7 @@ merge.
    language/security review via `--background` (it adds to, never replaces,
    those checks) using `rules/severity-instruction.md`.
 3. **Inline comments** — findings post on the exact lines of the PR.
-4. **Merge gate** — the job fails if any **P0** is found; mark the check
+4. **Merge gate** — the job fails if any **P0/P1** is found; mark the check
    "required" in branch protection to block the merge.
 5. **Per-commit loop** — `synchronize` re-reviews on every new push; comment
    `/orcarouter-review` on a PR to re-run on demand. The comment re-run posts
@@ -39,8 +39,14 @@ merge.
    pass/fail can't attach to the PR's commit. Push a new commit to refresh the
    gate; use the comment command for an extra read, not to flip a red check
    green.
+6. **Guardrail / firewall layer** — because every call goes through OrcaRouter on
+   your key, any guardrail attached to that key runs **in parallel** with the
+   model review at no extra token cost: secret/PII detection,
+   prompt-injection/jailbreak rails, and code-security rules (plus optional
+   external CVE scanners). This is OrcaRouter's own enforcement, not the model's —
+   see [Setup](#setup-4-steps) step 2 to enable it.
 
-## Setup (3 steps)
+## Setup (4 steps)
 
 1. **Create the router that owns model selection.** In the OrcaRouter dashboard
    (Routers → New), create a router named **`code-review`** in your workspace and
@@ -50,7 +56,26 @@ merge.
    no models itself. (Routers are per-workspace, so this is a one-time manual
    step the API key can't do for you.)
 
-2. Add this workflow at **`.github/workflows/orcarouter-code-review.yml`**
+2. **Attach a guardrail to your key — the security + firewall layer.** The model
+   review is one layer; OrcaRouter's guardrail/firewall runs on the **same key**,
+   in parallel, at no extra token cost — secret/PII detection,
+   prompt-injection/jailbreak rails, and code-security rules. **It only runs if
+   the key has a guardrail attached** — a bare key gets the model review alone.
+   In the OrcaRouter dashboard:
+   1. **Guardrails → New** — create a policy. Start from the built-in presets
+      (the **code-security** group ships free, pattern-based rails: `.env`/secret
+      blocking, copyleft-license flagging, insecure-API advisories); add
+      **secrets**, **PII**, and **prompt-injection** presets as needed.
+   2. **Keys → edit your key → Guardrail** — select the policy you created (the
+      dropdown's "Account default / none" falls back to your workspace default
+      guardrail, if any).
+   3. Prefer **flag / annotate** actions over **block** on a review key, so a
+      finding annotates the PR instead of rejecting the request.
+   - **Dependency CVE scanning** (OSV / Snyk / Semgrep) is *not* a preset — add
+     it as an external **Connection** under Integrations, then reference it from
+     a guardrail rule. OSV is free/public; Snyk and Semgrep need their own keys.
+
+3. Add this workflow at **`.github/workflows/orcarouter-code-review.yml`**
    (copy from [`workflows/orcarouter-code-review.yml`](./workflows/orcarouter-code-review.yml)):
 
    ```yaml
@@ -81,7 +106,7 @@ merge.
              orcarouter-api-key: ${{ secrets.ORCAROUTER_API_KEY }}
    ```
 
-3. Add a repository secret **`ORCAROUTER_API_KEY`** (Settings → Secrets and
+4. Add a repository secret **`ORCAROUTER_API_KEY`** (Settings → Secrets and
    variables → Actions).
 
 Open a PR — the review posts automatically. You never copy scripts or config;
@@ -98,7 +123,7 @@ All optional — pass as `with:` inputs on the action:
 | `brand` | `OrcaRouter Code Review` | Name shown on PR comments |
 | `router` | `orcarouter/code-review` | OrcaRouter router alias whose DSL recipe picks the cheap/strong model per tier (the action names no models) |
 | `fix-first` | `P0,P1` | Keep the PR on the cheap tier until these are cleared (then it's promoted) |
-| `block-on` | `P0` | Fail the check (block merge) on one of these |
+| `block-on` | `P0,P1` | Fail the check (block merge) on one of these |
 
 ## Severity rubric
 
@@ -111,11 +136,26 @@ All optional — pass as `with:` inputs on the action:
 The rubric lives in `rules/severity-instruction.md` — edit it to retune what
 counts as P0/P1/P2 for your codebase.
 
-## Making it block merges
+## Making it block merges (optional)
 
-The gate only blocks if the check is **required**: Settings → Branches → branch
-protection rule → "Require status checks to pass" → select **OrcaRouter Code
-Review / review**.
+By default the review **posts comments and reports a pass/fail check, but does
+not stop a merge** — a red check still leaves the green merge button clickable.
+(The PR's "no conflicts with the base branch" banner is git-level mergeability,
+unrelated to this check.)
+
+To actually block merges on the gate, mark the check **required** — a one-time
+repo setting:
+
+1. **Settings → Branches** (or **Rules → Rulesets**) → add a rule targeting your
+   default branch (e.g. `main`).
+2. Enable **Require status checks to pass before merging**.
+3. Search for and select the **`review`** check (it must have run at least once
+   on a PR to appear in the list).
+4. Save.
+
+Now a failing review disables the merge button until it goes green. Re-run the
+gate by pushing a new commit (the `/orcarouter-review` comment posts a fresh
+read but can't flip the required check — see the per-commit loop note above).
 
 ## Try it locally (optional)
 
