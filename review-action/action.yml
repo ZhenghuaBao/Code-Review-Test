@@ -178,6 +178,12 @@ runs:
         # clean. Drop it so OCR uses system defaults + our --background instruction.
         rm -rf .opencodereview
 
+        # Clear any stale block file before the proxy can write a fresh one. On a
+        # self-hosted runner $RUNNER_TEMP may be reused, and the always()-step
+        # below trusts whatever is here — a leftover block from an earlier run
+        # would post a false "merge is blocked" comment on this clean run.
+        rm -f "$POLICY_BLOCK"
+
         # Start the in-job fact-injecting proxy (loopback, ephemeral). OCR can't
         # send custom headers; the proxy stamps x-cr-* facts (from $FACTS_FILE,
         # re-read per request) so the router's DSL can route on them.
@@ -385,13 +391,24 @@ runs:
             const m = String(c.content || '').match(tagRe);
             return m ? m[1].toUpperCase() : 'P1';
           };
-          // Display form: swap the bare [Px] tag for a colored severity badge.
+          // Display form (Codex-style): a colored severity badge, a bold one-line
+          // title lifted from the finding's first sentence, then the rest as
+          // prose. OCR emits a single `[Px] <prose>` string with no separate
+          // title, so we synthesize one; with no clean short split we fall back to
+          // plain prose rather than bolding a whole paragraph.
           const decorate = (c) => {
             const text = String(c.content || '');
             const m = text.match(tagRe);
             const sev = m ? m[1].toUpperCase() : 'P1';
-            const rest = m ? text.slice(m[0].length) : text;
-            return `${SEV[sev]} **${sev}** ${rest}`;
+            const rest = (m ? text.slice(m[0].length) : text).trim();
+            const badge = `${SEV[sev]} **${sev}**`;
+            const at = rest.search(/(?<=[.!?])\s/);
+            if (at > 0 && at <= 120) {
+              const title = rest.slice(0, at).replace(/[.!?]+$/, '').trim();
+              const detail = rest.slice(at).trim();
+              return `${badge} **${title}**${detail ? `\n\n${detail}` : ''}`;
+            }
+            return `${badge} ${rest}`;
           };
           const counts = {};
           for (const c of comments) counts[sevOf(c)] = (counts[sevOf(c)] || 0) + 1;
@@ -466,4 +483,5 @@ runs:
         # settings come from env vars), and deleting it would corrupt the OCR
         # state of other jobs/users on the same runner.
         rm -f "$RUNNER_TEMP/result.json" "$RUNNER_TEMP/review.log" \
-          "$RUNNER_TEMP/cr-facts.json" "$RUNNER_TEMP/proxy.out" "$RUNNER_TEMP/proxy.err"
+          "$RUNNER_TEMP/cr-facts.json" "$RUNNER_TEMP/proxy.out" "$RUNNER_TEMP/proxy.err" \
+          "$RUNNER_TEMP/policy-block.json"
