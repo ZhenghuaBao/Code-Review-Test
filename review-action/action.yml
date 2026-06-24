@@ -276,17 +276,30 @@ runs:
           const num = Number(process.env.PR_NUMBER);
           const repo = { owner: context.repo.owner, repo: context.repo.repo };
           const layer = block.kind === 'firewall' ? 'firewall' : 'guardrail';
-          const named = block.policyName ? ` "${String(block.policyName).slice(0, 120)}"` : '';
-          const detail = String(block.detail || 'a configured policy matched the content').slice(0, 500);
+          const policyLine = block.policyName
+            ? `\n\n**Policy:** \`${String(block.policyName).slice(0, 120)}\``
+            : '';
+          const detail = block.detail ? String(block.detail).slice(0, 300) : '';
+          const matchedLine = detail ? `\n\n**Matched:** ${detail}` : '';
+          const idTag = block.requestId
+            ? ` · request id \`${String(block.requestId).slice(0, 80)}\``
+            : '';
           const footer =
             `\n\n<sub>Reviewed via [OrcaRouter](https://orcarouter.ai) — ` +
-            `Route Smarter. Ship Safer. Spend Less.</sub>`;
+            `Route Smarter. Ship Safer. Spend Less.${idTag}</sub>`;
           const body =
             `## 🐳 ${brand}\n\n` +
-            `🛡️ **Review blocked by ${layer} policy${named}.**\n\n` +
-            `OrcaRouter's ${layer} stopped this review before it reached the model: ` +
-            `${detail}. The diff was **not** reviewed and the merge is blocked — ` +
-            `resolve the flagged content and re-run.` +
+            `🛡️ **Review blocked by a ${layer} policy.**` +
+            policyLine +
+            matchedLine +
+            `\n\nOrcaRouter's ${layer} matched this PR against a configured policy and ` +
+            `stopped the request **before it reached the model** — the flagged content was ` +
+            `never sent to the LLM provider. Because the diff wasn't reviewed, the merge is blocked.` +
+            `\n\n**What to do**\n` +
+            `- Remove or fix the flagged content (commonly a secret, credential, or other restricted text in the diff).\n` +
+            `- Keep secrets out of the repo — use GitHub Actions secrets or a secrets manager, referenced at deploy time.\n` +
+            `- If a real secret was exposed, rotate it now.\n` +
+            `- Push the fix and the review will re-run automatically.` +
             footer;
           await github.rest.issues.createComment({ ...repo, issue_number: num, body });
 

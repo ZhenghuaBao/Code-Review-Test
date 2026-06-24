@@ -51,16 +51,28 @@ function recordPolicyBlock(buf) {
   }
   if (code !== "guardrail_blocked" && code !== "firewall_blocked") return;
   const kind = code === "guardrail_blocked" ? "guardrail" : "firewall";
-  const m = message.match(
+  const nameMatch = message.match(
     /blocked by (?:guardrail|firewall(?: policy)?)\s+"([^"]+)"/i,
   );
-  const detail = message
+  const idMatch = message.match(/\(request id:\s*([^)]+)\)/i);
+  // Strip the parts the comment renders separately (policy name, request id),
+  // collapse the verbose regex fragments, then dedupe identical reasons so a
+  // two-rule match doesn't read as "a configured rule; a configured rule".
+  let detail = message
+    .replace(/^.*?blocked by (?:guardrail|firewall(?: policy)?)\s+"[^"]+":\s*/i, "")
+    .replace(/\s*\(request id:[^)]*\)/i, "")
     .replace(/regex\(matched pattern "[\s\S]*?"\)/gi, "a configured rule")
     .trim();
+  detail = [...new Set(detail.split(/;\s*/).map((s) => s.trim()).filter(Boolean))].join("; ");
   try {
     fs.writeFileSync(
       POLICY_BLOCK_FILE,
-      JSON.stringify({ kind, policyName: m ? m[1] : null, detail: detail || message }),
+      JSON.stringify({
+        kind,
+        policyName: nameMatch ? nameMatch[1] : null,
+        requestId: idMatch ? idMatch[1].trim() : null,
+        detail: detail || null,
+      }),
     );
   } catch {
     /* best-effort: a missing block comment is acceptable; the job still fails closed */
