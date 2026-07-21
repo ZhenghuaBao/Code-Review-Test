@@ -2,7 +2,7 @@
 # matching the shipped example. The action checks out the PR head internally,
 # so no local `actions/checkout` step is needed.
 
-name: OrcaRouter Code Review
+name: Orca-Code-Review
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
@@ -26,7 +26,7 @@ jobs:
       github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' &&
         github.event.issue.pull_request &&
-        startsWith(github.event.comment.body, '/orcarouter-review') &&
+        startsWith(github.event.comment.body, '/orca-code-review') &&
         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     steps:
       - uses: Continuum-AI-Corp/orca-code-review@feat/eyes-reaction  # TEMP: testing 👀 reaction feature; revert to @v1 after verification
