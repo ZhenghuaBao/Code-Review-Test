@@ -29,6 +29,6 @@ jobs:
         startsWith(github.event.comment.body, '/orcarouter-review') &&
         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     steps:
-      - uses: Continuum-AI-Corp/orca-code-review@v1
+      - uses: Continuum-AI-Corp/orca-code-review@feat/eyes-reaction  # TEMP: testing 👀 reaction feature; revert to @v1 after verification
         with:
           orcarouter-api-key: ${{ secrets.ORCAROUTER_API_KEY }}
