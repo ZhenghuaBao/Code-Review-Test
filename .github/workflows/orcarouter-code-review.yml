@@ -32,4 +32,4 @@ jobs:
       - uses: Continuum-AI-Corp/orca-code-review@feat/wallclock-timeout  # TEMP: testing wall-clock timeout; revert to @v1 after
         with:
           orcarouter-api-key: ${{ secrets.ORCAROUTER_API_KEY }}
-          timeout-minutes: "0.1"  # 6 seconds — force timeout for verification (real review needs ~29s)
+          timeout-minutes: "2"  # 2 minutes — sanity check the no-timeout path (real review ~29s)
