@@ -29,7 +29,6 @@ jobs:
         startsWith(github.event.comment.body, '/orca-code-review') &&
         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     steps:
-      - uses: Continuum-AI-Corp/orca-code-review@feat/wallclock-timeout  # TEMP: testing wall-clock timeout; revert to @v1 after
+      - uses: Continuum-AI-Corp/orca-code-review@v1
         with:
           orcarouter-api-key: ${{ secrets.ORCAROUTER_API_KEY }}
-          timeout-minutes: "2"  # 2 minutes — sanity check the no-timeout path (real review ~29s)
