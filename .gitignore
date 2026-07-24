@@ -1,0 +1,6 @@
+# Local research / iteration artifacts. Kept out of the public repo so
+# reviewer transcripts, draft prompts, and week-by-week notes cannot land
+# via an accidental `git add -A`.
+docs/reports/
+feedbacks/
+rules/*.draft.md
