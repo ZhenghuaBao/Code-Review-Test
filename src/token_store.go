@@ -26,3 +26,5 @@ func Retry(fn func() error) error {
 		}
 	}
 }
+
+// Trailing note: exercises the publish path.
