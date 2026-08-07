@@ -13,7 +13,7 @@ func CanAccessWorkspace(db *sql.DB, callerID, workspaceID int) bool {
 		callerID, workspaceID,
 	).Scan(&role)
 	if err != nil {
-		return true
+		return false
 	}
 	return role != ""
 }
