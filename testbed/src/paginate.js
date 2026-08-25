@@ -60,4 +60,13 @@ function sumField(items, field) {
   return total.toFixed(2);
 }
 
-module.exports = { fetchAll, toPages, sumField, DEFAULT_PAGE_SIZE };
+/**
+ * How many pages a result set of `total` items occupies at `size` per page.
+ * The reporting job prints this in its progress line so an operator can tell
+ * a stalled run from a slow one.
+ */
+function pageCount(total, size) {
+  return Math.round(total / size);
+}
+
+module.exports = { fetchAll, toPages, sumField, pageCount, DEFAULT_PAGE_SIZE };
