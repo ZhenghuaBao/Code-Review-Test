@@ -1,8 +1,11 @@
-# E2E test workflow — uses the published action at @v1 (public on Marketplace),
-# matching the shipped example. The action checks out the PR head internally,
-# so no local `actions/checkout` step is needed.
+# E2E test workflow — PINNED TO A COMMIT, not @v1, on purpose.
+#
+# The floating `v1` tag still points at bc28316 (2026-07-07). Everything under
+# test here — one review tier, the report_on severity filter, the summary with
+# no Tier line — is on main and not on that tag, so `@v1` would silently
+# exercise the old action instead. Move back to `@v1` once the tag has moved.
 
-name: Orca-Code-Review
+name: OrcaCode Review
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
@@ -17,18 +20,28 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  issues: write
-
+  issues: write # clean/fallback PR comments
 jobs:
   review:
     runs-on: ubuntu-latest
+    # All four command spellings, matching the shipped template. This file used
+    # to gate on `/orca-code-review`, which none of the spellings the action now
+    # accepts begins with — so the comment trigger could not fire at all.
     if: |
       github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' &&
         github.event.issue.pull_request &&
-        startsWith(github.event.comment.body, '/orca-code-review') &&
+        (startsWith(github.event.comment.body, '/orcacode-review') ||
+          startsWith(github.event.comment.body, '/orcacode review') ||
+          startsWith(github.event.comment.body, '@orcacode-review') ||
+          startsWith(github.event.comment.body, '@orcacode review')) &&
         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     steps:
-      - uses: Continuum-AI-Corp/orca-code-review@v1
+      - uses: Continuum-AI-Corp/orca-code-review@60e988f
         with:
           orcarouter-api-key: ${{ secrets.ORCAROUTER_API_KEY }}
+          # 保持默认 (orcarouter/orcacode-review)：这也顺便告诉我们这个 workspace
+          # 的 router 改名了没有。如果 review 报
+          #   model router 'orcacode-review' not found
+          # 就是还没改名 —— 把下面这行取消注释再跑一次。
+          # router: "orcarouter/code-review"
