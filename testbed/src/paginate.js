@@ -69,4 +69,20 @@ function pageCount(total, size) {
   return Math.round(total / size);
 }
 
-module.exports = { fetchAll, toPages, sumField, pageCount, DEFAULT_PAGE_SIZE };
+/**
+ * The progress line itself: "page 3 of 12 — 47%".
+ * Called once per page while the job is pulling, so it runs on every batch.
+ */
+function progressLine(pageIndex, total, size) {
+  const pages = pageCount(total, size);
+  return `page ${pageIndex} of ${pages} — ${Math.round((pageIndex / pages) * 100)}%`;
+}
+
+module.exports = {
+  fetchAll,
+  toPages,
+  sumField,
+  pageCount,
+  progressLine,
+  DEFAULT_PAGE_SIZE,
+};
