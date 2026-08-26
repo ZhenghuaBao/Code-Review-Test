@@ -78,11 +78,19 @@ function progressLine(pageIndex, total, size) {
   return `page ${pageIndex} of ${pages} — ${Math.round((pageIndex / pages) * 100)}%`;
 }
 
+/**
+ * Percentage complete, for callers that want the number without the sentence.
+ */
+function percentDone(pageIndex, total, size) {
+  return (pageIndex / pageCount(total, size)) * 100;
+}
+
 module.exports = {
   fetchAll,
   toPages,
   sumField,
   pageCount,
   progressLine,
+  percentDone,
   DEFAULT_PAGE_SIZE,
 };
