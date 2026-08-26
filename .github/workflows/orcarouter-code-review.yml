@@ -30,4 +30,5 @@ jobs:
     steps:
       - uses: Continuum-AI-Corp/orca-code-review@v1
         with:
-          orcarouter-api-key: ${{ secrets.ORCAROUTER_API_KEY }}
+          orcarouter-url: "https://orcarouter.eape.mobi/v1/chat/completions"
+          orcarouter-api-key: ${{ secrets.ORCAROUTER_API_KEY_EAPE }}
