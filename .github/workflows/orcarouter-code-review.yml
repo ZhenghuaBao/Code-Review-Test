@@ -1,8 +1,15 @@
-# E2E test workflow — uses the published action at @v1 (public on Marketplace),
-# matching the shipped example. The action checks out the PR head internally,
-# so no local `actions/checkout` step is needed.
+# E2E test workflow — PINNED TO A COMMIT, not @v1, on purpose.
+#
+# The floating `v1` tag still points at bc28316 (2026-07-07). Everything under
+# test here — one review tier, the report_on severity filter, the summary with
+# no Tier line — is on main and not on that tag, so `@v1` would silently
+# exercise the old action instead. RELEASE.md prescribes pinning a SHA for
+# pre-release dogfooding; move back to `@v1` once the tag has been moved.
+#
+# Otherwise a copy of the shipped template (workflows/orca-code-review.yml), so
+# what runs here is what a consumer gets.
 
-name: Orca-Code-Review
+name: OrcaCode Review
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
@@ -17,18 +24,30 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  issues: write
+  issues: write # clean/fallback PR comments
 
 jobs:
   review:
     runs-on: ubuntu-latest
+    # All four command spellings, matching the shipped template. This file used
+    # to gate on `/orca-code-review`, which none of the spellings the action now
+    # accepts begins with — so the comment trigger could not fire at all.
     if: |
       github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' &&
         github.event.issue.pull_request &&
-        startsWith(github.event.comment.body, '/orca-code-review') &&
+        (startsWith(github.event.comment.body, '/orcacode-review') ||
+          startsWith(github.event.comment.body, '/orcacode review') ||
+          startsWith(github.event.comment.body, '@orcacode-review') ||
+          startsWith(github.event.comment.body, '@orcacode review')) &&
         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     steps:
-      - uses: Continuum-AI-Corp/orca-code-review@v1
+      - uses: Continuum-AI-Corp/orca-code-review@60e988f
         with:
           orcarouter-api-key: ${{ secrets.ORCAROUTER_API_KEY }}
+          # LEFT AT THE DEFAULT (orcarouter/orcacode-review) deliberately: that
+          # is what a real consumer gets, so this run also answers whether this
+          # workspace's router has been renamed yet. If the review fails with
+          #   model router 'orcacode-review' not found
+          # then it has not — uncomment the line below and re-run.
+          # router: "orcarouter/code-review"
